@@ -57,7 +57,14 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
   };
 
   useEffect(() => {
-    let player: any = null;
+    const loadScript = () => {
+      if (!window.YT) {
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+      }
+    };
 
     const initPlayer = () => {
       if (!window.YT || !window.YT.Player) return;
@@ -65,8 +72,14 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
       const playerContainer = document.getElementById(`youtube-player-${videoId}`);
       if (!playerContainer) return;
 
-      player = new window.YT.Player(`youtube-player-${videoId}`, {
+      // Clean up existing player if any
+      if (playerRef.current && typeof playerRef.current.destroy === 'function') {
+        playerRef.current.destroy();
+      }
+
+      playerRef.current = new window.YT.Player(`youtube-player-${videoId}`, {
         videoId: videoId,
+        host: 'https://www.youtube.com',
         playerVars: {
           autoplay: 1,
           controls: 0,
@@ -79,124 +92,133 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
           iv_load_policy: 3,
           disablekb: 1,
           fs: 0,
-          playsinline: 1
+          playsinline: 1,
+          origin: window.location.origin,
+          enablejsapi: 1
         },
         events: {
           onReady: (event: any) => {
+            playerRef.current = event.target;
             setIsReady(true);
-            setIsPlaying(true);
             setIsMuted(true);
-            event.target.playVideo();
+            setIsPlaying(true);
+            if (typeof event.target.playVideo === 'function') {
+              event.target.playVideo();
+            }
             hideControlsAfterDelay();
           },
           onStateChange: (event: any) => {
-            if (event.data === window.YT.PlayerState.PLAYING) {
+            // 1 is playing
+            if (event.data === 1) {
               setIsPlaying(true);
               hideControlsAfterDelay();
-            }
-            if (event.data === window.YT.PlayerState.PAUSED) {
+            } 
+            // 2 is paused
+            else if (event.data === 2) {
               setIsPlaying(false);
               setShowControls(true);
+            } 
+            // 0 is ended
+            else if (event.data === 0) {
+              if (typeof event.target.playVideo === 'function') {
+                event.target.playVideo();
+              }
             }
-            if (event.data === window.YT.PlayerState.ENDED) {
-              event.target.playVideo();
-            }
+          },
+          onError: (error: any) => {
+            console.error("YouTube Player Error:", error);
           }
         }
       });
-      playerRef.current = player;
     };
 
-    if (!window.YT || !window.YT.Player) {
-      const tag = document.createElement('script');
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
-
+    if (window.YT && window.YT.Player) {
+      initPlayer();
+    } else {
       const previousOnReady = window.onYouTubeIframeAPIReady;
       window.onYouTubeIframeAPIReady = () => {
         if (previousOnReady) previousOnReady();
         initPlayer();
       };
-    } else {
-      initPlayer();
+      loadScript();
     }
 
     return () => {
-      if (playerRef.current && playerRef.current.destroy) {
+      if (playerRef.current && typeof playerRef.current.destroy === 'function') {
         playerRef.current.destroy();
       }
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
   }, [videoId]);
 
-  const togglePlay = (e: MouseEvent) => {
-    e.stopPropagation();
+  const togglePlayAction = () => {
     if (!playerRef.current || !isReady) return;
-    if (isPlaying) {
-      playerRef.current.pauseVideo();
-    } else {
-      playerRef.current.playVideo();
+    
+    try {
+      const playerState = typeof playerRef.current.getPlayerState === 'function' 
+        ? playerRef.current.getPlayerState() 
+        : -1;
+
+      // 1 is playing, 3 is buffering
+      const currentlyPlaying = playerState === 1 || playerState === 3;
+
+      if (currentlyPlaying) {
+        if (typeof playerRef.current.pauseVideo === 'function') {
+          playerRef.current.pauseVideo();
+        }
+      } else {
+        // Always unmute on first play interaction
+        if (isMuted && typeof playerRef.current.unMute === 'function') {
+          playerRef.current.unMute();
+          setIsMuted(false);
+        }
+        if (typeof playerRef.current.playVideo === 'function') {
+          playerRef.current.playVideo();
+        }
+      }
+      setShowControls(true);
+      hideControlsAfterDelay();
+    } catch (err) {
+      console.error("Error toggling play:", err);
     }
-    setShowControls(true);
-    hideControlsAfterDelay();
   };
 
-  const toggleMute = (e: MouseEvent) => {
+  const togglePlay = (e: MouseEvent) => {
     e.stopPropagation();
-    if (!playerRef.current || !isReady) return;
-    if (isMuted) {
-      playerRef.current.unMute();
-      setIsMuted(false);
-    } else {
-      playerRef.current.mute();
-      setIsMuted(true);
-    }
-    setShowControls(true);
-    hideControlsAfterDelay();
+    togglePlayAction();
   };
 
   const handleContainerClick = () => {
-    setShowControls(prev => !prev);
-    if (!showControls) {
-      hideControlsAfterDelay();
-    }
+    togglePlayAction();
   };
 
   return (
     <div 
       ref={containerRef} 
-      className="relative w-full h-full group cursor-pointer"
+      className="relative w-full h-full group cursor-pointer overflow-hidden rounded-[32px]"
       onClick={handleContainerClick}
     >
-      <div id={`youtube-player-${videoId}`} className="w-full h-full pointer-events-none"></div>
+      <div id={`youtube-player-${videoId}`} className="w-full h-full pointer-events-none scale-[1.01]"></div>
       
-      {/* Custom Controls Overlay */}
-      <div className={`absolute inset-0 flex flex-col justify-between p-6 transition-all duration-300 bg-gradient-to-t from-black/60 via-transparent to-black/20 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        <div className="flex justify-end">
-          <button 
-            onClick={toggleMute}
-            className="w-12 h-12 glass rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform text-white"
-          >
-            {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
-          </button>
-        </div>
-        
-        <div className="flex justify-center items-center h-full">
-          <button 
-            onClick={togglePlay}
-            className="w-20 h-20 bg-brand rounded-full flex items-center justify-center shadow-neon hover:scale-110 active:scale-95 transition-transform text-black"
-          >
-            {isPlaying ? <Pause className="w-10 h-10 fill-black" /> : <Play className="w-10 h-10 fill-black ml-1" />}
-          </button>
-        </div>
+      {/* Discrete Play/Pause Button Overlay */}
+      <div className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ${showControls ? 'bg-black/20 opacity-100' : 'opacity-0 pointer-events-none'} z-20`}>
+        <button 
+          onClick={togglePlay}
+          className="w-20 h-20 glass rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-all text-white border border-white/20 backdrop-blur-md shadow-2xl"
+        >
+          {isPlaying ? (
+            <Pause className="w-10 h-10 fill-white" />
+          ) : (
+            <Play className="w-10 h-10 fill-white ml-1" />
+          )}
+        </button>
       </div>
 
-      {/* Unmute Prompt (if muted and playing) */}
-      {isMuted && isPlaying && !showControls && (
-        <div className="absolute top-6 left-6 animate-bounce pointer-events-none">
-          <div className="glass px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-2">
-            <VolumeX className="w-3 h-3" /> Clique para ouvir
+      {/* Subtle Unmute Prompt (only if still muted and playing) */}
+      {isMuted && isPlaying && (
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-pulse">
+          <div className="glass px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-2 border border-white/10">
+            <VolumeX className="w-4 h-4" /> Clique para Ativar o Som
           </div>
         </div>
       )}
@@ -216,7 +238,7 @@ const CTAButton = ({ text, subtext, className = "", onClick }: { text: ReactNode
     if (onClick) {
       onClick();
     } else {
-      window.location.href = CHECKOUT_URL;
+      window.open(CHECKOUT_URL, '_blank');
     }
   };
 
@@ -408,9 +430,6 @@ export default function App() {
             <div className="absolute -inset-4 bg-brand/20 blur-3xl opacity-30 rounded-full"></div>
             <div className="relative aspect-[9/16] bg-zinc-900 rounded-[32px] border border-white/10 overflow-hidden shadow-2xl">
               <VideoPlayer videoId="DTYpZj6WIUg" />
-            </div>
-            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-brand text-black px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-neon whitespace-nowrap">
-              Assista ao vídeo e entenda o método
             </div>
           </motion.div>
         </div>
