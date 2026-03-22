@@ -44,8 +44,17 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isReady, setIsReady] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const hideControlsAfterDelay = () => {
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (isPlaying) setShowControls(false);
+    }, 3000);
+  };
 
   useEffect(() => {
     let player: any = null;
@@ -53,6 +62,9 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
     const initPlayer = () => {
       if (!window.YT || !window.YT.Player) return;
       
+      const playerContainer = document.getElementById(`youtube-player-${videoId}`);
+      if (!playerContainer) return;
+
       player = new window.YT.Player(`youtube-player-${videoId}`, {
         videoId: videoId,
         playerVars: {
@@ -73,25 +85,37 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
           onReady: (event: any) => {
             setIsReady(true);
             setIsPlaying(true);
+            setIsMuted(true);
             event.target.playVideo();
+            hideControlsAfterDelay();
           },
           onStateChange: (event: any) => {
-            if (event.data === window.YT.PlayerState.PLAYING) setIsPlaying(true);
-            if (event.data === window.YT.PlayerState.PAUSED) setIsPlaying(false);
-            if (event.data === window.YT.PlayerState.ENDED) event.target.playVideo();
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              setIsPlaying(true);
+              hideControlsAfterDelay();
+            }
+            if (event.data === window.YT.PlayerState.PAUSED) {
+              setIsPlaying(false);
+              setShowControls(true);
+            }
+            if (event.data === window.YT.PlayerState.ENDED) {
+              event.target.playVideo();
+            }
           }
         }
       });
       playerRef.current = player;
     };
 
-    if (!window.YT) {
+    if (!window.YT || !window.YT.Player) {
       const tag = document.createElement('script');
       tag.src = "https://www.youtube.com/iframe_api";
       const firstScriptTag = document.getElementsByTagName('script')[0];
       firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
 
+      const previousOnReady = window.onYouTubeIframeAPIReady;
       window.onYouTubeIframeAPIReady = () => {
+        if (previousOnReady) previousOnReady();
         initPlayer();
       };
     } else {
@@ -102,6 +126,7 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
       if (playerRef.current && playerRef.current.destroy) {
         playerRef.current.destroy();
       }
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
   }, [videoId]);
 
@@ -113,6 +138,8 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
     } else {
       playerRef.current.playVideo();
     }
+    setShowControls(true);
+    hideControlsAfterDelay();
   };
 
   const toggleMute = (e: MouseEvent) => {
@@ -125,27 +152,40 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
       playerRef.current.mute();
       setIsMuted(true);
     }
+    setShowControls(true);
+    hideControlsAfterDelay();
+  };
+
+  const handleContainerClick = () => {
+    setShowControls(prev => !prev);
+    if (!showControls) {
+      hideControlsAfterDelay();
+    }
   };
 
   return (
-    <div ref={containerRef} className="relative w-full h-full group">
+    <div 
+      ref={containerRef} 
+      className="relative w-full h-full group cursor-pointer"
+      onClick={handleContainerClick}
+    >
       <div id={`youtube-player-${videoId}`} className="w-full h-full pointer-events-none"></div>
       
       {/* Custom Controls Overlay */}
-      <div className="absolute inset-0 flex flex-col justify-between p-6 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/60 via-transparent to-black/20">
+      <div className={`absolute inset-0 flex flex-col justify-between p-6 transition-all duration-300 bg-gradient-to-t from-black/60 via-transparent to-black/20 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <div className="flex justify-end">
           <button 
             onClick={toggleMute}
-            className="w-12 h-12 glass rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white"
+            className="w-12 h-12 glass rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform text-white"
           >
             {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
           </button>
         </div>
         
-        <div className="flex justify-center mb-12">
+        <div className="flex justify-center items-center h-full">
           <button 
             onClick={togglePlay}
-            className="w-20 h-20 bg-brand rounded-full flex items-center justify-center shadow-neon hover:scale-110 transition-transform text-black"
+            className="w-20 h-20 bg-brand rounded-full flex items-center justify-center shadow-neon hover:scale-110 active:scale-95 transition-transform text-black"
           >
             {isPlaying ? <Pause className="w-10 h-10 fill-black" /> : <Play className="w-10 h-10 fill-black ml-1" />}
           </button>
@@ -153,8 +193,8 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
       </div>
 
       {/* Unmute Prompt (if muted and playing) */}
-      {isMuted && isPlaying && (
-        <div className="absolute top-6 left-6 animate-bounce">
+      {isMuted && isPlaying && !showControls && (
+        <div className="absolute top-6 left-6 animate-bounce pointer-events-none">
           <div className="glass px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-2">
             <VolumeX className="w-3 h-3" /> Clique para ouvir
           </div>
@@ -166,19 +206,34 @@ const VideoPlayer = ({ videoId }: { videoId: string }) => {
 
 const CHECKOUT_URL = "https://pay.hotmart.com/A104895176T?checkoutMode=10";
 
-const CTAButton = ({ text, subtext, className = "", onClick }: { text: ReactNode; subtext?: string; className?: string; onClick?: () => void }) => (
-  <motion.button
-    whileHover={{ scale: 1.02, boxShadow: "0 0 30px rgba(0, 255, 0, 0.4)" }}
-    whileTap={{ scale: 0.98 }}
-    onClick={onClick || (() => window.location.href = CHECKOUT_URL)}
-    className={`w-full max-w-md bg-brand hover:bg-[#00e600] text-black font-black py-5 px-8 rounded-2xl shadow-neon transition-all flex flex-col items-center justify-center group cursor-pointer ${className}`}
-  >
-    <span className="text-xl md:text-2xl uppercase tracking-tight flex items-center justify-center gap-2 text-center leading-none">
-      {text} <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform shrink-0" />
-    </span>
-    {subtext && <span className="text-[10px] md:text-xs font-bold opacity-70 mt-2 uppercase tracking-widest">{subtext}</span>}
-  </motion.button>
-);
+const CTAButton = ({ text, subtext, className = "", onClick }: { text: ReactNode; subtext?: string; className?: string; onClick?: () => void }) => {
+  const handleClick = () => {
+    // Track Facebook Pixel event
+    if (typeof window !== 'undefined' && (window as any).fbq) {
+      (window as any).fbq('track', 'InitiateCheckout');
+    }
+    
+    if (onClick) {
+      onClick();
+    } else {
+      window.location.href = CHECKOUT_URL;
+    }
+  };
+
+  return (
+    <motion.button
+      whileHover={{ scale: 1.02, boxShadow: "0 0 30px rgba(0, 255, 0, 0.4)" }}
+      whileTap={{ scale: 0.98 }}
+      onClick={handleClick}
+      className={`w-full max-w-md bg-brand hover:bg-[#00e600] text-black font-black py-5 px-8 rounded-2xl shadow-neon transition-all flex flex-col items-center justify-center group cursor-pointer ${className}`}
+    >
+      <span className="text-xl md:text-2xl uppercase tracking-tight flex items-center justify-center gap-2 text-center leading-none">
+        {text} <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform shrink-0" />
+      </span>
+      {subtext && <span className="text-[10px] md:text-xs font-bold opacity-70 mt-2 uppercase tracking-widest">{subtext}</span>}
+    </motion.button>
+  );
+};
 
 const FAQItem = ({ question, answer }: { question: string; answer: string }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -318,7 +373,7 @@ export default function App() {
             transition={{ delay: 0.1 }}
             className="text-5xl md:text-8xl font-black leading-[0.9] tracking-tighter mb-8 uppercase italic"
           >
-            Recupere o <br /> seu <span className="text-brand">Foco</span> e a <br /> sua <span className="text-brand">Vida</span> em 21 <br /> dias.
+            Recupere o <br /> seu <span className="text-brand">Foco</span> e a <br /> sua <span className="text-brand">Vida</span> em <br /> 21 dias.
           </motion.h1>
 
           <motion.div
@@ -400,7 +455,7 @@ export default function App() {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-4xl md:text-7xl font-black tracking-tighter uppercase mb-8 leading-none">
+            <h2 className="text-3xl md:text-7xl font-black tracking-tighter uppercase mb-8 leading-none">
               O Despertar <span className="text-brand">Digital</span>
             </h2>
             <p className="text-xl text-zinc-400 mb-8 leading-relaxed">
@@ -486,7 +541,6 @@ export default function App() {
             title="Bônus Exclusivos" 
             subtitle="Aceleradores para o seu resultado ser ainda mais rápido e duradouro."
           />
-          
           <div className="space-y-10">
             {[
               { 
@@ -625,7 +679,7 @@ export default function App() {
                 Oferta de Lançamento • Acesso Imediato
               </motion.span>
               
-              <h2 className="text-4xl md:text-7xl font-black tracking-tighter uppercase mb-10 leading-none">
+              <h2 className="text-3xl md:text-7xl font-black tracking-tighter uppercase mb-10 leading-none">
                 Tudo o que você <br /> vai <span className="text-brand">receber</span>:
               </h2>
 
@@ -638,7 +692,7 @@ export default function App() {
                   { title: "Cronograma Dia a Dia dos 21 Dias", desc: "Ações simples para adultos ocupados.", price: "R$ 27,00" },
                   { title: "Checklists Exclusivos", desc: "Acompanhe e celebre suas vitórias.", price: "R$ 17,00" },
                   { title: "BÔNUS 1: Meditação para Iniciantes", desc: "Técnicas de 5 min para foco total.", price: "GRÁTIS", isBonus: true },
-                  { title: "BÔNUS 2: Versão para Impressão", desc: "O plano na parede para sair do ecrã.", price: "GRÁTIS", isBonus: true },
+                  { title: "BÔNUS 2: Versão para Impressão", desc: "O plano na parede para sair da tela.", price: "GRÁTIS", isBonus: true },
                   { title: "BÔNUS 3: Protocolo Pôr do Sol Digital", desc: "Transforme suas noites e sua energia.", price: "GRÁTIS", isBonus: true },
                 ].map((item, i) => (
                   <motion.div 
