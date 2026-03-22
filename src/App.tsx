@@ -15,6 +15,7 @@ import {
   Users, 
   Target, 
   Lock,
+  Search,
   ChevronDown,
   ChevronUp,
   Star,
@@ -22,23 +23,160 @@ import {
   Moon,
   Wind,
   Play,
+  Pause,
+  Volume2,
+  VolumeX,
   AlertTriangle,
   Heart,
   Sparkles,
   Timer
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, MouseEvent, ReactNode } from "react";
 
-const CTAButton = ({ text, subtext, className = "" }: { text: string; subtext?: string; className?: string }) => (
+declare global {
+  interface Window {
+    onYouTubeIframeAPIReady: () => void;
+    YT: any;
+  }
+}
+
+const VideoPlayer = ({ videoId }: { videoId: string }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [isReady, setIsReady] = useState(false);
+  const playerRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let player: any = null;
+
+    const initPlayer = () => {
+      if (!window.YT || !window.YT.Player) return;
+      
+      player = new window.YT.Player(`youtube-player-${videoId}`, {
+        videoId: videoId,
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          modestbranding: 1,
+          rel: 0,
+          showinfo: 0,
+          loop: 1,
+          playlist: videoId,
+          mute: 1,
+          iv_load_policy: 3,
+          disablekb: 1,
+          fs: 0,
+          playsinline: 1
+        },
+        events: {
+          onReady: (event: any) => {
+            setIsReady(true);
+            setIsPlaying(true);
+            event.target.playVideo();
+          },
+          onStateChange: (event: any) => {
+            if (event.data === window.YT.PlayerState.PLAYING) setIsPlaying(true);
+            if (event.data === window.YT.PlayerState.PAUSED) setIsPlaying(false);
+            if (event.data === window.YT.PlayerState.ENDED) event.target.playVideo();
+          }
+        }
+      });
+      playerRef.current = player;
+    };
+
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+
+      window.onYouTubeIframeAPIReady = () => {
+        initPlayer();
+      };
+    } else {
+      initPlayer();
+    }
+
+    return () => {
+      if (playerRef.current && playerRef.current.destroy) {
+        playerRef.current.destroy();
+      }
+    };
+  }, [videoId]);
+
+  const togglePlay = (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!playerRef.current || !isReady) return;
+    if (isPlaying) {
+      playerRef.current.pauseVideo();
+    } else {
+      playerRef.current.playVideo();
+    }
+  };
+
+  const toggleMute = (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!playerRef.current || !isReady) return;
+    if (isMuted) {
+      playerRef.current.unMute();
+      setIsMuted(false);
+    } else {
+      playerRef.current.mute();
+      setIsMuted(true);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full h-full group">
+      <div id={`youtube-player-${videoId}`} className="w-full h-full pointer-events-none"></div>
+      
+      {/* Custom Controls Overlay */}
+      <div className="absolute inset-0 flex flex-col justify-between p-6 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/60 via-transparent to-black/20">
+        <div className="flex justify-end">
+          <button 
+            onClick={toggleMute}
+            className="w-12 h-12 glass rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white"
+          >
+            {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+          </button>
+        </div>
+        
+        <div className="flex justify-center mb-12">
+          <button 
+            onClick={togglePlay}
+            className="w-20 h-20 bg-brand rounded-full flex items-center justify-center shadow-neon hover:scale-110 transition-transform text-black"
+          >
+            {isPlaying ? <Pause className="w-10 h-10 fill-black" /> : <Play className="w-10 h-10 fill-black ml-1" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Unmute Prompt (if muted and playing) */}
+      {isMuted && isPlaying && (
+        <div className="absolute top-6 left-6 animate-bounce">
+          <div className="glass px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-2">
+            <VolumeX className="w-3 h-3" /> Clique para ouvir
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const CHECKOUT_URL = "https://pay.hotmart.com/A104895176T?checkoutMode=10";
+
+const CTAButton = ({ text, subtext, className = "", onClick }: { text: ReactNode; subtext?: string; className?: string; onClick?: () => void }) => (
   <motion.button
-    whileHover={{ scale: 1.02 }}
+    whileHover={{ scale: 1.02, boxShadow: "0 0 30px rgba(0, 255, 0, 0.4)" }}
     whileTap={{ scale: 0.98 }}
-    className={`w-full max-w-md bg-brand hover:bg-brand-dark text-black font-black py-5 px-8 rounded-2xl shadow-neon shadow-neon-hover transition-all flex flex-col items-center justify-center group cursor-pointer ${className}`}
+    onClick={onClick || (() => window.location.href = CHECKOUT_URL)}
+    className={`w-full max-w-md bg-brand hover:bg-[#00e600] text-black font-black py-5 px-8 rounded-2xl shadow-neon transition-all flex flex-col items-center justify-center group cursor-pointer ${className}`}
   >
-    <span className="text-xl md:text-2xl uppercase tracking-tight flex items-center gap-2 text-center">
-      {text} <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+    <span className="text-xl md:text-2xl uppercase tracking-tight flex items-center justify-center gap-2 text-center leading-none">
+      {text} <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform shrink-0" />
     </span>
-    {subtext && <span className="text-xs font-bold opacity-70 mt-1 uppercase tracking-widest">{subtext}</span>}
+    {subtext && <span className="text-[10px] md:text-xs font-bold opacity-70 mt-2 uppercase tracking-widest">{subtext}</span>}
   </motion.button>
 );
 
@@ -103,13 +241,36 @@ const SectionTitle = ({ title, subtitle, light = false }: { title: string; subti
 
 export default function App() {
   const [timeLeft, setTimeLeft] = useState(900); // 15 minutes
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const offerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
-    return () => clearInterval(timer);
+
+    const handleScroll = () => {
+      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = (window.scrollY / totalHeight) * 100;
+      setScrollProgress(progress);
+      setShowBackToTop(window.scrollY > 1000);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const scrollToOffer = () => {
+    offerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -120,9 +281,20 @@ export default function App() {
   return (
     <div className="min-h-screen bg-white selection:bg-brand selection:text-black">
       
+      {/* URGENCY BANNER */}
+      <div className="bg-zinc-950 border-b border-brand/20 py-2.5 px-4 sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto flex items-center justify-center gap-3 text-brand font-black text-[10px] md:text-xs uppercase tracking-[0.2em]">
+          <Timer className="w-4 h-4 animate-pulse" />
+          A oferta expira em: {formatTime(timeLeft)}
+        </div>
+        {/* Scroll Progress Bar */}
+        <div className="absolute bottom-0 left-0 h-[2px] bg-brand transition-all duration-100" style={{ width: `${scrollProgress}%` }}></div>
+      </div>
+      
       {/* 1. HERO SECTION (High Contrast) */}
       <section className="bg-zinc-950 text-white pt-20 pb-32 px-6 relative overflow-hidden">
         {/* Abstract Background Elements */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand/10 blur-[150px] rounded-full opacity-50"></div>
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-brand/5 blur-[120px] rounded-full"></div>
         <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-brand/5 blur-[120px] rounded-full"></div>
 
@@ -139,51 +311,49 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="text-5xl md:text-8xl font-black leading-[0.95] tracking-tighter mb-8 uppercase italic"
+            className="text-5xl md:text-8xl font-black leading-[0.9] tracking-tighter mb-8 uppercase italic"
           >
-            Recupere o seu <span className="text-brand">Foco</span> e sua <span className="text-brand">Vida</span> em 21 dias.
+            Recupere o <br /> seu <span className="text-brand">Foco</span> e a <br /> sua <span className="text-brand">Vida</span> em 21 <br /> dias.
           </motion.h1>
 
-          <motion.p 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="text-xl md:text-2xl text-zinc-400 mb-12 max-w-3xl mx-auto font-medium"
+            transition={{ delay: 0.2 }}
+            className="mb-12"
           >
-            O guia definitivo para vencer o vício digital, reduzir a ansiedade e retomar o controle do seu tempo.
-          </motion.p>
+            <p className="text-blue-400 font-bold text-sm md:text-lg uppercase tracking-widest mb-4">
+              inclua uma frase aqui sobre o método
+            </p>
+            <p className="text-xl md:text-2xl text-zinc-400 max-w-3xl mx-auto font-medium leading-relaxed">
+              O guia definitivo para vencer o vício digital, reduzir a ansiedade e retomar o controle do seu tempo.
+            </p>
+          </motion.div>
 
           <div className="flex flex-col items-center gap-6">
-            <CTAButton text="QUERO ME LIBERTAR AGORA" subtext="Oferta por tempo limitado" />
-            <div className="flex items-center gap-3 text-brand font-black text-sm uppercase tracking-widest">
-              <Timer className="w-5 h-5 animate-pulse" />
-              A oferta expira em: {formatTime(timeLeft)}
-            </div>
+            <CTAButton 
+              text={
+                <span className="block">
+                  QUERO ME LIBERTAR <br /> AGORA
+                </span>
+              } 
+              subtext="Oferta por tempo limitado" 
+            />
           </div>
 
-          {/* VSL Placeholder */}
+          {/* VSL Video */}
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.5 }}
-            className="mt-20 relative max-w-4xl mx-auto group cursor-pointer"
+            className="mt-20 relative max-w-md mx-auto group"
           >
-            <div className="absolute -inset-1 bg-gradient-to-r from-brand/20 to-transparent blur-xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
-            <div className="relative aspect-video bg-zinc-900 rounded-[32px] border border-white/10 overflow-hidden shadow-2xl">
-              <img 
-                src="https://picsum.photos/seed/focus/1200/675?blur=2" 
-                alt="Vídeo de Apresentação" 
-                className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-24 h-24 bg-brand rounded-full flex items-center justify-center shadow-neon group-hover:scale-110 transition-transform">
-                  <Play className="w-10 h-10 text-black fill-black ml-1" />
-                </div>
-              </div>
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 glass px-6 py-3 rounded-full text-xs font-black uppercase tracking-widest">
-                Assista ao vídeo de apresentação
-              </div>
+            <div className="absolute -inset-4 bg-brand/20 blur-3xl opacity-30 rounded-full"></div>
+            <div className="relative aspect-[9/16] bg-zinc-900 rounded-[32px] border border-white/10 overflow-hidden shadow-2xl">
+              <VideoPlayer videoId="DTYpZj6WIUg" />
+            </div>
+            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-brand text-black px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-neon whitespace-nowrap">
+              Assista ao vídeo e entenda o método
             </div>
           </motion.div>
         </div>
@@ -201,7 +371,7 @@ export default function App() {
             {[
               { icon: AlertTriangle, title: "Ansiedade Constante", desc: "A sensação de estar perdendo algo sempre que não está com o celular na mão." },
               { icon: Brain, title: "Foco Destruído", desc: "Dificuldade em ler um livro ou se concentrar em uma tarefa por mais de 10 minutos." },
-              { icon: Moon, title: "Sono Prejudicado", desc: "Horas perdidas em 'scroll infinito' antes de dormir, resultando em cansaço crônico." }
+              { icon: Moon, title: "Sono Prejudicado", desc: "Horas perdidas em rolagem infinita antes de dormir, resultando em cansaço crônico." }
             ].map((item, i) => (
               <motion.div 
                 key={i}
@@ -232,7 +402,7 @@ export default function App() {
               O Despertar <span className="text-brand">Digital</span>
             </h2>
             <p className="text-xl text-zinc-400 mb-8 leading-relaxed">
-              Não é sobre abandonar a tecnologia, é sobre retomar o comando. Nosso método foi desenhado para reprogramar sua relação com o digital em apenas 3 semanas.
+              Não é sobre abandonar a tecnologia, é sobre retomar o comando. Nosso método foi desenhado para reprogramar a sua relação com o digital em apenas 3 semanas.
             </p>
             <div className="space-y-6">
               {[
@@ -250,7 +420,10 @@ export default function App() {
               ))}
             </div>
             <div className="mt-12">
-              <CTAButton text="QUERO O MÉTODO COMPLETO" className="max-w-sm" />
+              <CTAButton 
+                text="QUERO O MÉTODO COMPLETO" 
+                className="max-w-sm" 
+              />
             </div>
           </motion.div>
           
@@ -262,7 +435,7 @@ export default function App() {
           >
             <div className="absolute -inset-4 bg-brand/20 blur-3xl rounded-full opacity-30 animate-pulse"></div>
             <img 
-              src="https://picsum.photos/seed/freedom/800/1000" 
+              src="https://i.ibb.co/cSpb7msT/O-DETOX-PRINCIPAL-ipad.png" 
               alt="Liberdade Digital" 
               className="rounded-[40px] shadow-2xl relative z-10 border border-white/10"
               referrerPolicy="no-referrer"
@@ -281,12 +454,11 @@ export default function App() {
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
-              { icon: BookOpen, title: "Guia Despertar Digital", desc: "40 páginas com o protocolo completo de 21 dias passo a passo." },
-              { icon: Target, title: "Teste de AutoAvaliação", desc: "Descubra exatamente onde o celular está roubando seu tempo e energia." },
-              { icon: Zap, title: "Auditoria Digital", desc: "Um diagnóstico rápido em 4 passos para eliminar gatilhos de distração." },
-              { icon: Clock, title: "Cronograma 21 Dias", desc: "Ações diárias específicas e simples que cabem na rotina de um adulto ocupado." },
-              { icon: CheckCircle2, title: "Checklists Exclusivos", desc: "Acompanhe seu progresso diário e celebre cada pequena vitória." },
-              { icon: Users, title: "Comunidade VIP", desc: "Acesso ao grupo de apoio para troca de experiências e suporte." }
+              { icon: BookOpen, title: "Guia Despertar Digital — EBOOK PRINCIPAL", desc: "O protocolo completo de 21 dias, com um passo a passo diário para reduzir o tempo de tela e recuperar horas de foco real." },
+              { icon: Target, title: "Teste de AutoAvaliação Digital", desc: "Descubra exatamente onde o celular está roubando o seu tempo e energia — antes mesmo de começar." },
+              { icon: Search, title: "Auditoria Digital em 4 Passos", desc: "Um diagnóstico rápido do seu ambiente digital para identificar e eliminar os gatilhos de distração." },
+              { icon: Clock, title: "Cronograma Dia a Dia dos 21 Dias", desc: "Sem achismos. Cada dia tem uma ação específica, simples e que cabe na rotina de um adulto ocupado." },
+              { icon: CheckCircle2, title: "Checklists Exclusivos", desc: "Acompanhe o seu progresso diário e celebre cada vitória — pequenas conquistas criam hábitos duradouros." }
             ].map((item, i) => (
               <div key={i} className="flex flex-col gap-6 p-8 rounded-3xl bg-zinc-50 border border-zinc-100 items-start hover:border-brand/30 transition-colors">
                 <div className="bg-zinc-900 text-brand p-3 rounded-2xl">
@@ -318,25 +490,25 @@ export default function App() {
               { 
                 id: 1,
                 title: "Guia Prático de Meditação para Iniciantes", 
-                desc: "A ferramenta certa para acalmar a mente durante o processo de detox.",
+                desc: "A ferramenta certa para acalmar a mente durante o processo de Detox Digital.",
                 price: "R$ 47,90",
-                img: "https://picsum.photos/seed/meditation-guide/800/600",
+                img: "https://i.ibb.co/gb800fDZ/meditac-ao.png",
                 icon: "🧘‍♂️"
               },
               { 
                 id: 2,
                 title: "Guia Despertar Digital - VERSÃO PARA IMPRESSÃO", 
-                desc: "Todo o processo para você imprimir, marcar, seguir e rabiscar a vontade. Fica mais fácil para acompanhar o seu processo assim.",
+                desc: "Todo o processo para você imprimir, marcar, seguir e rabiscar à vontade. Fica mais fácil para acompanhar o seu processo assim.",
                 price: "R$ 47,90",
-                img: "https://picsum.photos/seed/print-guide/800/600",
+                img: "https://i.ibb.co/TqcLQghf/capa-despertar-digital-sozinha-ok.png",
                 icon: "🖨️"
               },
               { 
                 id: 3,
                 title: "Pôr do Sol Digital", 
-                desc: "Protocolo para resgatar o sono. Um guia passo a passo para melhorar o seu sono.",
+                desc: "Protocolo para resgatar o seu sono. Um guia passo a passo para melhorar a qualidade do seu descanso noturno.",
                 price: "R$ 47,90",
-                img: "https://picsum.photos/seed/sleep-guide/800/600",
+                img: "https://i.ibb.co/tM58p03z/bonus-3.png",
                 icon: "🌅"
               }
             ].map((bonus, i) => (
@@ -413,18 +585,36 @@ export default function App() {
           </motion.div>
 
           <div className="mt-16 flex justify-center">
-            <CTAButton text="QUERO GARANTIR MEUS BÔNUS" subtext="Disponível apenas para os próximos inscritos" />
+            <CTAButton 
+              text="QUERO GARANTIR MEUS BÔNUS" 
+              subtext="Disponível apenas para os próximos inscritos" 
+            />
           </div>
         </div>
       </section>
 
       {/* 6. CARD DE OFERTA (The Offer) */}
-      <section className="py-32 px-6 bg-white">
-        <div className="max-w-4xl mx-auto">
+      <section id="oferta" ref={offerRef} className="py-32 px-6 bg-white scroll-mt-20">
+        <div className="max-w-5xl mx-auto">
           <div className="bg-zinc-950 text-white rounded-[48px] p-10 md:p-20 text-center relative overflow-hidden shadow-2xl border border-white/5">
             <div className="absolute top-0 left-0 w-full h-3 bg-brand"></div>
             
             <div className="relative z-10">
+              {/* Mockups inside the black card */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                className="mb-16"
+              >
+                <img 
+                  src="https://i.ibb.co/R4GLXP12/COMPLETO.png" 
+                  alt="Pacote Completo" 
+                  className="w-full h-auto rounded-[32px] shadow-2xl border border-white/10"
+                  referrerPolicy="no-referrer"
+                />
+              </motion.div>
+
               <motion.span 
                 initial={{ opacity: 0, y: -10 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -440,11 +630,11 @@ export default function App() {
               {/* The Value Stack */}
               <div className="max-w-2xl mx-auto mb-16 space-y-4 text-left">
                 {[
-                  { title: "Guia Despertar Digital (40 páginas)", desc: "Protocolo completo de 21 dias passo a passo.", price: "R$ 67,00" },
+                  { title: "Guia Despertar Digital — EBOOK PRINCIPAL", desc: "Protocolo completo de 21 dias passo a passo.", price: "R$ 67,00" },
                   { title: "Teste de AutoAvaliação Digital", desc: "Descubra onde o celular rouba seu tempo.", price: "R$ 27,00" },
                   { title: "Auditoria Digital em 4 Passos", desc: "Elimine gatilhos de distração agora.", price: "R$ 37,00" },
-                  { title: "Cronograma Dia a Dia (21 Dias)", desc: "Ações simples para adultos ocupados.", price: "R$ 27,00" },
-                  { title: "Checklists Exclusivos de Progresso", desc: "Acompanhe e celebre suas vitórias.", price: "R$ 17,00" },
+                  { title: "Cronograma Dia a Dia dos 21 Dias", desc: "Ações simples para adultos ocupados.", price: "R$ 27,00" },
+                  { title: "Checklists Exclusivos", desc: "Acompanhe e celebre suas vitórias.", price: "R$ 17,00" },
                   { title: "BÔNUS 1: Meditação para Iniciantes", desc: "Técnicas de 5 min para foco total.", price: "GRÁTIS", isBonus: true },
                   { title: "BÔNUS 2: Versão para Impressão", desc: "O plano na parede para sair do ecrã.", price: "GRÁTIS", isBonus: true },
                   { title: "BÔNUS 3: Protocolo Pôr do Sol Digital", desc: "Transforme suas noites e sua energia.", price: "GRÁTIS", isBonus: true },
@@ -453,8 +643,9 @@ export default function App() {
                     key={i}
                     initial={{ opacity: 0, x: -20 }}
                     whileInView={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className={`flex items-center justify-between p-4 rounded-2xl border ${item.isBonus ? 'bg-brand/5 border-brand/20' : 'bg-white/5 border-white/10'}`}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.05, duration: 0.5 }}
+                    className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 hover:translate-x-2 ${item.isBonus ? 'bg-brand/5 border-brand/20' : 'bg-white/5 border-white/10'}`}
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.isBonus ? 'bg-brand text-black' : 'bg-white/10 text-brand'}`}>
@@ -474,7 +665,7 @@ export default function App() {
               
               <div className="flex flex-col items-center mb-12 bg-white/5 p-6 md:p-12 rounded-[48px] border border-white/10 w-full">
                 <p className="text-zinc-400 font-bold uppercase tracking-widest text-[10px] md:text-xs mb-8 text-center max-w-md px-4">
-                  Você recebe o Guia Principal + 4 Ferramentas de Apoio + 3 Bônus Exclusivos por menos que o preço de um café.
+                  Você recebe o Guia Principal + 4 Ferramentas de Apoio + 3 Bônus Exclusivos por menos do que o preço de um café.
                 </p>
                 <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs md:text-sm mb-6">Valor Total do Pacote: <span className="line-through">R$ 243,70</span></p>
                 
@@ -554,10 +745,12 @@ export default function App() {
             viewport={{ once: true }}
             className="flex justify-center mb-10"
           >
-            <div className="relative">
-              <ShieldCheck className="w-32 h-32 text-brand" />
-              <div className="absolute -top-2 -right-2 bg-zinc-950 text-white text-[10px] font-black p-3 rounded-full w-12 h-12 flex items-center justify-center border-4 border-white shadow-xl">7 DIAS</div>
-            </div>
+            <img 
+              src="https://i.ibb.co/4ZCZ3N8K/Medalha-de-Garantia-de-Satisfacao-100-PNG-Transparente-Sem-Fundo.png" 
+              alt="Garantia de Satisfação 100%" 
+              className="w-48 h-auto"
+              referrerPolicy="no-referrer"
+            />
           </motion.div>
           <h2 className="text-3xl md:text-5xl font-black mb-6 uppercase tracking-tight">Risco Zero Para Você</h2>
           <p className="text-zinc-500 text-xl leading-relaxed mb-10 max-w-2xl mx-auto">
@@ -576,7 +769,7 @@ export default function App() {
           <div className="space-y-2">
             <FAQItem 
               question="Como vou receber o produto?" 
-              answer="O acesso é imediato. Assim que o pagamento for confirmado, você receberá um e-mail com os dados de acesso à nossa plataforma exclusiva com todo o conteúdo." 
+              answer="O acesso é imediato. Assim que o pagamento for confirmado, você receberá um e-mail com os dados de acesso à nossa plataforma exclusiva, onde encontrará todo o conteúdo organizado." 
             />
             <FAQItem 
               question="Por quanto tempo terei acesso?" 
@@ -587,8 +780,8 @@ export default function App() {
               answer="Com certeza. O Despertar Digital não ensina a abandonar o celular, mas sim a usá-lo de forma produtiva e consciente, eliminando o uso passivo e viciante." 
             />
             <FAQItem 
-              question="E se eu tiver dúvidas durante o processo?" 
-              answer="Você terá acesso ao nosso suporte VIP e à nossa comunidade de alunos, onde poderá tirar todas as suas dúvidas diretamente com nossa equipe." 
+              question="O método é difícil de seguir?" 
+              answer="Não. O Despertar Digital foi desenhado para ser simples e direto. Cada dia tem uma ação clara e rápida que qualquer pessoa, mesmo com a rotina mais corrida, consegue implementar de forma independente." 
             />
           </div>
         </div>
@@ -621,6 +814,20 @@ export default function App() {
         </div>
       </footer>
 
+      {/* Back to Top Button */}
+      <AnimatePresence>
+        {showBackToTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.5, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.5, y: 20 }}
+            onClick={scrollToTop}
+            className="fixed bottom-8 right-8 z-[60] w-12 h-12 bg-brand text-black rounded-full flex items-center justify-center shadow-neon hover:scale-110 transition-transform"
+          >
+            <ChevronUp className="w-6 h-6" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
