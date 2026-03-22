@@ -292,7 +292,12 @@ export default function App() {
       </div>
       
       {/* 1. HERO SECTION (High Contrast) */}
-      <section className="bg-zinc-950 text-white pt-20 pb-32 px-6 relative overflow-hidden">
+      <section 
+        className="bg-zinc-950 text-white pt-20 pb-32 px-6 relative overflow-hidden bg-cover bg-center bg-no-repeat"
+        style={{ 
+          backgroundImage: 'linear-gradient(to bottom, rgba(9, 9, 11, 0.85), rgba(9, 9, 11, 0.95)), url("https://i.ibb.co/CsnNnWqf/background.png")' 
+        }}
+      >
         {/* Abstract Background Elements */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand/10 blur-[150px] rounded-full opacity-50"></div>
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-brand/5 blur-[120px] rounded-full"></div>
@@ -322,9 +327,6 @@ export default function App() {
             transition={{ delay: 0.2 }}
             className="mb-12"
           >
-            <p className="text-blue-400 font-bold text-sm md:text-lg uppercase tracking-widest mb-4">
-              inclua uma frase aqui sobre o método
-            </p>
             <p className="text-xl md:text-2xl text-zinc-400 max-w-3xl mx-auto font-medium leading-relaxed">
               O guia definitivo para vencer o vício digital, reduzir a ansiedade e retomar o controle do seu tempo.
             </p>
